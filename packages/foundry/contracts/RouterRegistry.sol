@@ -16,10 +16,14 @@ contract RouterRegistry is Ownable {
     uint256 public defaultRouterId;
     uint256 public nextRouterId;
 
+    // Per-token router overrides
+    mapping(address => bytes32) public tokenRouterOverrides;
+
     event RouterRegistered(uint256 indexed routerId, address indexed adapter, string name);
     event RouterDeactivated(uint256 indexed routerId);
     event RouterActivated(uint256 indexed routerId);
     event DefaultRouterSet(uint256 indexed routerId);
+    event TokenRouterOverrideSet(address indexed token, bytes32 indexed routerId);
 
     constructor(address _guardian) Ownable(_guardian) {}
 
@@ -62,6 +66,15 @@ contract RouterRegistry is Ownable {
         require(routers[routerId].active, "Router not active");
         defaultRouterId = routerId;
         emit DefaultRouterSet(routerId);
+    }
+
+    /// @notice Set a preferred router for a specific token (overrides default)
+    /// @param token The token address
+    /// @param routerId The router ID to use for this token
+    function setTokenRouterOverride(address token, bytes32 routerId) external onlyOwner {
+        require(routers[uint256(routerId)].adapter != address(0), "Router not registered");
+        tokenRouterOverrides[token] = routerId;
+        emit TokenRouterOverrideSet(token, routerId);
     }
 
     /// @notice Get the router adapter address for a given router ID

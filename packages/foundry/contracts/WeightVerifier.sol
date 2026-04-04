@@ -12,7 +12,6 @@ contract WeightVerifier is Ownable, EIP712 {
     using ECDSA for bytes32;
 
     uint256 public constant STALENESS_WINDOW = 90 minutes;
-    uint256 public constant SIGNER_ROTATION_DELAY = 24 hours;
 
     bytes32 public constant REBALANCE_ORDER_TYPEHASH = keccak256(
         "RebalanceOrder(address vault,address[] tokens,uint16[] weightsBPS,uint256 nonce,uint256 timestamp)"
@@ -22,7 +21,7 @@ contract WeightVerifier is Ownable, EIP712 {
 
     // Signer rotation
     address public pendingSigner;
-    uint256 public signerRotationCommitTime;
+    uint256 public pendingSignerCommitTimestamp;
 
     // Per-vault state
     struct VaultWeights {
@@ -32,13 +31,21 @@ contract WeightVerifier is Ownable, EIP712 {
         uint256 lastSubmitted;
     }
 
+    // Contract-level nonce for signer rotation invalidation
+    uint256 public nonce;
+
     mapping(address => VaultWeights) private _vaultWeights;
     mapping(address => bool) public authorizedVaults;
 
+    modifier onlyGuardian() {
+        require(owner() == _msgSender(), "Caller is not the guardian");
+        _;
+    }
+
     event WeightsSubmitted(address indexed vault, address[] tokens, uint16[] weightsBPS, uint256 nonce, uint256 timestamp);
-    event SignerRotationCommitted(address indexed newSigner, uint256 executeAfter);
-    event SignerRotationExecuted(address indexed oldSigner, address indexed newSigner);
-    event SignerRotationCancelled(address indexed cancelledSigner);
+    event SignerRotationCommitted(address newSigner, uint256 timestamp);
+    event SignerRotationExecuted(address oldSigner, address newSigner, uint256 timestamp);
+    event SignerRotationCancelled(address cancelledSigner, uint256 timestamp);
     event VaultAuthorized(address indexed vault, bool authorized);
 
     constructor(
@@ -127,39 +134,38 @@ contract WeightVerifier is Ownable, EIP712 {
 
     // --- Signer Rotation (two-step commit-reveal) ---
 
-    /// @notice Step 1: Commit to a new signer. 24h delay before execution.
-    function commitSignerRotation(address newSigner) external onlyOwner {
-        require(newSigner != address(0), "Zero signer");
-        require(newSigner != larvAISigner, "Same signer");
-
+    /// @notice Commit to a new LarvAI signer (first step of two-step rotation)
+    /// @param newSigner The new signer address to commit to
+    /// @dev Only callable by guardian. Must wait 24h before executing.
+    function commitSignerRotation(address newSigner) external onlyGuardian {
+        require(newSigner != address(0), "Invalid signer");
         pendingSigner = newSigner;
-        signerRotationCommitTime = block.timestamp;
-
-        emit SignerRotationCommitted(newSigner, block.timestamp + SIGNER_ROTATION_DELAY);
+        pendingSignerCommitTimestamp = block.timestamp;
+        emit SignerRotationCommitted(newSigner, block.timestamp);
     }
 
-    /// @notice Step 2: Execute signer rotation after delay
-    function executeSignerRotation() external onlyOwner {
+    /// @notice Execute pending signer rotation (second step)
+    /// @dev Must be called at least 24h after commitSignerRotation
+    function executeSignerRotation() external {
         require(pendingSigner != address(0), "No pending rotation");
-        require(block.timestamp >= signerRotationCommitTime + SIGNER_ROTATION_DELAY, "Delay not met");
-
+        require(
+            block.timestamp >= pendingSignerCommitTimestamp + 24 hours,
+            "Must wait 24h"
+        );
         address oldSigner = larvAISigner;
         larvAISigner = pendingSigner;
         pendingSigner = address(0);
-        signerRotationCommitTime = 0;
-
-        emit SignerRotationExecuted(oldSigner, larvAISigner);
+        pendingSignerCommitTimestamp = 0;
+        nonce++; // Increment nonce to invalidate any pending orders from old signer
+        emit SignerRotationExecuted(oldSigner, larvAISigner, block.timestamp);
     }
 
-    /// @notice Cancel a pending signer rotation
-    function cancelSignerRotation() external onlyOwner {
+    /// @notice Cancel pending signer rotation
+    function cancelSignerRotation() external onlyGuardian {
         require(pendingSigner != address(0), "No pending rotation");
-
-        address cancelled = pendingSigner;
+        emit SignerRotationCancelled(pendingSigner, block.timestamp);
         pendingSigner = address(0);
-        signerRotationCommitTime = 0;
-
-        emit SignerRotationCancelled(cancelled);
+        pendingSignerCommitTimestamp = 0;
     }
 
     // --- Internal ---
