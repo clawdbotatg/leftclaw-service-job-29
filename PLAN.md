@@ -2,50 +2,105 @@
 
 ## Overview
 
-ClawDex is an ERC-4626 index vault system on Base where users deposit USDC to gain diversified exposure to Base ecosystem tokens. LarvAI autonomously determines portfolio weights via EIP-712 signed messages verified onchain. Safety rails constrain all AI decisions within governance-set bounds. CLAWD token captures value through fee burns and staker distribution.
+An ERC-4626 index vault on Base where users deposit USDC to gain diversified exposure to Base ecosystem tokens. LarvAI determines portfolio weights via signed EIP-712 messages. Onchain safety rails constrain all AI decisions within governance-set bounds. CLAWD token captures economic value through fee burns and staker revenue share.
 
-**Client:** `0x2e67ce77a6e6bc4a3c06e7ea284b4b27a81e7c03`
-**Chain:** Base (8453)
-**Job:** LeftClaw Services Job #29
+## Architecture — MVP Scope
 
----
+The client's full vision includes 8+ contracts. For a shippable MVP, we build the core system that demonstrates the full flow: deposit USDC → get index shares → AI rebalances → redeem for USDC. Advanced features (IndexFactory multi-vault, TEE attestation, CLAWD staking, Subgraph indexing) are stubbed for future iterations.
 
-## Architecture
+### Smart Contracts (4 contracts — MVP)
 
-### Smart Contracts (Foundry)
+#### 1. `ClawDexVault.sol` (ERC-4626)
+- **Deposit asset:** USDC (6 decimals)
+- **Share token:** cDEX (18 decimals), pro-rata claim on underlying basket
+- **Mint:** User deposits USDC → vault holds USDC until rebalance applies weights → mints shares at NAV
+- **Redeem:** User burns shares → vault sells pro-rata basket back to USDC via router → sends USDC
+- **NAV:** Sum of (token balance × Chainlink price) for each constituent, in USDC terms
+- **Inflation mitigation:** Virtual shares offset (1e6 dead shares)
+- **Fees:** managementFeeBPS, immutable maxFeeBPS ceiling. Fee recipient set to client address
+- **Pausing:** Pause only affects rebalancing. User deposits/withdrawals ALWAYS open
+- **ReentrancyGuard** on all external entry points. CEI pattern throughout
+- **Owner:** `job.client` (0x2e67ce77a6e6bc4a3c06e7ea284b4b27a81e7c03)
 
-The system uses 8 core contracts + 1 adapter:
+#### 2. `WeightVerifier.sol`
+- Validates LarvAI's signed weight vectors via EIP-712
+- Schema: `RebalanceOrder(address[] tokens, uint16[] weightsBPS, uint256 nonce, uint256 timestamp)`
+- Verification: recover signer must match registered LarvAI key, sequential nonce, 90-min staleness window, weights sum to 10000 BPS
+- Key rotation: two-step commit-reveal with 24h delay, guardian-only
+- Permissionless submission: anyone can relay signed payloads
+- **Guardian:** `job.client`
 
-1. **AssetRegistry** — Whitelisted tokens with Chainlink feeds, deployer groups, liquidity thresholds. Guardian-only add/remove. Index tagging for multi-vault sharing.
+#### 3. `SafetyModule.sol`
+- Max single token allocation: 2500 BPS (25%)
+- Max weight delta per token per cycle: 1500 BPS
+- Minimum cooldown between rebalances: 24 hours (hardcoded, immutable)
+- Max slippage per swap leg: configurable BPS
+- Circuit breakers: TVL drop threshold, stale signature rejection, oracle deviation check
+- Guardian pause/unpause (cannot halt user exits)
+- **Guardian:** `job.client`
 
-2. **SafetyModule** — Allocation caps (25% max single token, 35% max deployer group), rebalance constraints (max delta 2000 BPS/cycle, 24h cooldown), circuit breakers (TVL drop, oracle deviation, stale signatures). Pause only affects rebalancing, never user exits.
+#### 4. `AerodromeAdapter.sol` (ISwapRouter)
+- Implements `ISwapRouter` interface for pluggable routing
+- Wraps Aerodrome Router on Base for swap execution
+- Supports stable and volatile pool routing via `extraData`
+- Slippage enforcement built in
 
-3. **WeightVerifier** — Validates LarvAI's EIP-712 signed weight vectors. Sequential nonce, 90-min staleness window, weights must sum to 10000 BPS. Two-step commit-reveal key rotation with 24h delay.
+### Interfaces & Libraries
+- `ISwapRouter.sol` — pluggable router interface
+- `AssetRegistry` — simplified: stored inline in vault as a whitelist mapping with Chainlink feeds
 
-4. **RouterRegistry** — Maps router IDs to ISwapRouter adapter addresses. Global default + per-token overrides. Guardian-only management.
-
-5. **AerodromeAdapter** — Implements ISwapRouter, wraps Aerodrome Router on Base.
-
-6. **CLAWDFeeDistributor** — Receives fees from vaults. Burns 60% CLAWD, distributes 40% to stakers.
-
-7. **IndexVault (ERC-4626)** — Per-category vault. Deposits USDC, swaps into constituent tokens. Virtual shares for inflation attack mitigation. Users can always exit.
-
-8. **IndexFactory** — Deploys new IndexVault instances sharing common infrastructure.
-
-9. **RebalanceExecutor** — Orchestrates rebalance: reads verified weights, validates via SafetyModule, executes swaps.
-
-### External Integrations
-
+### External Contracts (registered in externalContracts.ts)
 - USDC on Base: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
-- Chainlink Price Feeds on Base
 - Aerodrome Router: `0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43`
-- CLAWD Token: `0x9f860bF488C6528FDe522e08da3B98f498caD6b07`
+- Chainlink price feeds (Base): ETH/USD, WBTC/USD, cbETH/USD, etc.
 
-### Frontend (Next.js + SE2)
+### What's Deferred (Post-MVP)
+- IndexFactory (multi-vault deployment) — single vault for MVP
+- TEE attestation verification — EIP-712 signature verification only for MVP
+- CLAWDFeeDistributor — fees go to client address for MVP
+- CLAWD staking — future iteration
+- RouterRegistry — single Aerodrome adapter for MVP
+- Subgraph indexing — use contract reads for MVP
+- Governance (Snapshot + Zodiac) — guardian multisig for MVP
 
-Pages: Dashboard, Deposit/Redeem, Allocations, CLAWD Staking, Admin/Guardian
+## Frontend
 
-### Deployment
+### Pages
+1. **Dashboard** — Index NAV, current allocations pie chart, TVL, performance
+2. **Deposit/Redeem** — USDC deposit flow (Approve → Deposit → Confirmation). Show estimated shares, NAV/share, fees
+3. **Allocations** — Current target weights vs actual weights, last rebalance time, weight history
+4. **Admin** — Guardian functions: pause/unpause, update signer, update safety params
 
-- Contracts: Base mainnet, verified on Basescan
-- Frontend: BGIPFS (static export)
+### Key Components
+- Real-time NAV via `useScaffoldReadContract` polling `totalAssets()`
+- Weight verification status showing onchain proof of LarvAI signature
+- Three-button flow: Switch Network → Approve USDC → Deposit
+- Transaction history with Basescan links
+- Mobile responsive, DaisyUI styling
+
+## Integrations
+- **Chainlink Price Feeds (Base)** — NAV calculation, staleness checks
+- **Aerodrome** — primary swap router for rebalance execution
+- **USDC** — deposit asset
+
+## Security Priorities
+- ERC-4626 inflation attack: virtual shares offset
+- Oracle manipulation: Chainlink only (not DEX spot)
+- Reentrancy: ReentrancyGuard + CEI on all externals
+- Token decimals: read dynamically, never hardcode
+- User exits always open: pause never blocks withdrawals
+- Immutable max fee ceiling
+- Sequential nonce for weight signatures (replay prevention)
+- Access control: guardian = job.client for all admin functions
+
+## Chain
+- **Base** (chain ID 8453)
+- Deploy contracts to Base mainnet
+- Frontend to BGIPFS
+
+## Stack
+- Scaffold-ETH 2 (Foundry)
+- Solidity 0.8.20+
+- OpenZeppelin Contracts
+- Next.js + wagmi + viem + RainbowKit
+- DaisyUI for styling
