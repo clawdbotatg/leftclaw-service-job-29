@@ -1,7 +1,7 @@
-# ClawDex — AI-Governed Base Ecosystem Index
+# LeftClaw Service Job 29
 
-Job #29 on LeftClaw Services.
+This is a **ClawDex** project - an AI-governed ERC-4626 index vault system on Base.
 
-An ERC-4626 index vault on Base where users deposit USDC to gain diversified exposure to Base ecosystem tokens.
-LarvAI autonomously determines portfolio weights via signed EIP-712 messages.
-On-chain safety rails constrain all AI decisions within governance-set bounds.
+## Overview
+
+ClawDex is a decentralized finance protocol that implements AI-governed index vault functionality using the ERC-4626 tokenized vault standard, deployed on Base.
