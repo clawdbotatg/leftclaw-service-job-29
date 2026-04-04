@@ -1,102 +1,133 @@
-# USERJOURNEY.md — ClawDex User Flows
+# USERJOURNEY.md — ClawDex: AI-Governed Base Ecosystem Index
 
-## Flow 1: Deposit USDC into an Index Vault
+## Actors
+
+- **User** — deposits USDC, holds index shares, redeems
+- **Staker** — stakes CLAWD to earn fee revenue
+- **Guardian** — client's multisig (admin of all contracts)
+
+---
+
+## Journey 1: User Deposits USDC into an Index Vault
 
 ### Happy Path
-1. User opens ClawDex dashboard at the IPFS URL
-2. User sees available index vaults listed (e.g., "Base Blue Chip Index") with NAV, TVL, performance metrics
-3. User clicks "Deposit" on a vault
-4. **No wallet connected:** App shows "Connect Wallet" button. User clicks, RainbowKit modal opens, user connects MetaMask/WalletConnect
-5. **Wrong network:** App shows "Switch to Base" button. User clicks, wallet prompts network switch. Only after switching does the deposit form appear
-6. User enters USDC amount (e.g., "100")
-   - App shows estimated shares to receive based on current NAV per share
-   - App shows fee breakdown (management fee BPS, performance fee BPS)
-   - App shows current index allocations (token weights)
-7. **Insufficient USDC balance:** Deposit button disabled, shows "Insufficient USDC balance"
-8. **Step 1 — Approve:** User clicks "Approve USDC". Wallet prompts approval for the exact deposit amount. Transaction confirms
-9. **Step 2 — Deposit:** After approval confirms, button changes to "Deposit". User clicks. Wallet prompts deposit tx. Loading spinner shown
-10. Transaction confirms. Success notification. Share balance updates. Dashboard reflects new TVL
+
+1. **Land on Dashboard (/)** — sees "🦞 ClawDex" heading, active vaults count, CLAWD staked, total burned. "How It Works" section at the bottom. If no vaults deployed yet, sees "No vaults deployed yet" message.
+2. **Navigate to Deposit/Redeem (/vault)** — sees vault stats: TVL, NAV/Share, Management Fee %, Performance Fee %.
+3. **Not connected** — sees "Connect your wallet to deposit or redeem."
+4. **Connect wallet** (RainbowKit) — wallet modal opens. User picks MetaMask/WalletConnect/Coinbase Wallet.
+5. **Wrong network** — sees "Please switch to the correct network" + "Switch Network" button. Clicks it → wallet prompts chain switch to Base.
+6. **Correct network, Deposit tab active** — sees USDC amount input. Types amount (e.g., "100"). Below the input, sees estimated shares calculation.
+7. **Approve USDC** — note below input says "You will need to approve USDC first if allowance is insufficient." User must approve USDC before deposit can succeed.
+8. **Click "Deposit"** — button shows "Depositing..." while pending. Wallet prompts tx confirmation. On success: "Deposit successful!" toast. Amount clears. Vault stats update (TVL increases, new share balance).
+9. **Verify** — user can check block explorer for the tx. Index shares (e.g., cBASE) appear in wallet as ERC-20 token.
 
 ### Edge Cases
-- **Zero amount:** Deposit button disabled
-- **Amount exceeds balance:** Button disabled with message
-- **Transaction reverted:** Error notification with human-readable message
-- **Wallet disconnects mid-flow:** Returns to "Connect Wallet" state
-- **Pending approval but user navigates away:** On return, checks allowance and skips approve if sufficient
+
+- **Insufficient USDC balance** → tx reverts, "Insufficient USDC balance" error toast
+- **Zero amount** → Deposit button stays disabled
+- **User rejects tx** → "Transaction rejected" error toast
+- **No vaults** → "No vaults deployed yet. Guardian must create one first." card shown, no deposit UI
 
 ---
 
-## Flow 2: Redeem Shares for USDC
+## Journey 2: User Redeems Shares for USDC
 
 ### Happy Path
-1. User navigates to their vault position or clicks "Redeem" on dashboard
-2. App shows current share balance and estimated USDC redemption value
-3. User enters number of shares to redeem (or clicks "Max")
-4. App shows estimated USDC to receive (based on NAV)
-5. User clicks "Redeem". Wallet prompts transaction
-6. Transaction confirms. USDC balance updates. Share balance decreases
+
+1. **Navigate to Deposit/Redeem (/vault)** — click "Redeem" tab.
+2. **Enter shares to redeem** — estimated USDC shown below (shares × NAV/share).
+3. **Click "Redeem"** — button shows "Redeeming..." while pending. Wallet confirms. On success: "Redeem successful!" toast. Shares burned, USDC returned.
+4. **Verify** — USDC balance increases in wallet. Share balance decreases.
 
 ### Edge Cases
-- **No shares:** Redeem section shows "No position in this vault"
-- **Vault paused:** Redemptions ALWAYS work even when paused (by design). UI should confirm this
-- **Slippage on underlying swaps:** UI shows minimum USDC output
-- **Zero shares entered:** Button disabled
+
+- **Redemption always works** — even when rebalancing is paused. This is a core safety guarantee.
+- **Zero shares** → Redeem button stays disabled
+- **More shares than owned** → tx reverts with error
 
 ---
 
-## Flow 3: View Allocations & Rebalance History
+## Journey 3: View Current Allocations
 
 ### Happy Path
-1. User navigates to "Allocations" page
-2. Sees current allocation pie chart with token weights and USD values
-3. Sees target weights (from LarvAI's last signed vector) vs actual weights
-4. Sees last rebalance timestamp and next eligible rebalance window
-5. Scrolls to see historical weight changes over time (event log)
-6. Each rebalance entry shows: timestamp, before/after weights, attestation hash
+
+1. **Navigate to Allocations (/allocations)** — no wallet required.
+2. **Sees Total NAV** — total USD value of vault holdings.
+3. **LarvAI Nonce** — number of weight submissions processed.
+4. **Current Allocations** — color bar showing proportional weights, table with token addresses and percentages.
+5. **Safety Rails** — max single token (25%), max delta/cycle (15%), max deployer group (35%).
+6. **LarvAI Signer** — the registered signer address with info about EIP-712 verification and 90-min staleness window.
 
 ### Edge Cases
-- **No rebalance yet:** Shows "Awaiting first rebalance" with initial equal weights
-- **Stale weights:** Shows warning banner if last weight submission > 90 min ago
+
+- **No constituents yet** → "No constituents yet — awaiting first rebalance from LarvAI" shown
+- **Stale LarvAI data** → Nonce and weights shown as last valid state. Circuit breaker would prevent bad rebalances.
 
 ---
 
-## Flow 4: Stake CLAWD for Fee Share
+## Journey 4: Stake CLAWD for Fee Revenue
 
 ### Happy Path
-1. User navigates to "Staking" page
-2. Sees current staking APY, total staked, their staked balance, unclaimed rewards
-3. User enters CLAWD amount to stake
-4. **Step 1 — Approve CLAWD:** User approves CLAWD token for the fee distributor
-5. **Step 2 — Stake:** User clicks "Stake". Transaction confirms. Balance updates
-6. User can later click "Claim Rewards" to harvest accumulated fee share
-7. User can "Unstake" to withdraw CLAWD
+
+1. **Navigate to Staking (/staking)** — sees total CLAWD staked, burn ratio (60%), user's stake, pending rewards.
+2. **Connect wallet** if not connected.
+3. **Switch network** if wrong chain.
+4. **Enter CLAWD amount** → click "Stake" → approve CLAWD if needed → wallet confirms → "Staked successfully!" toast.
+5. **See updated stats** — your stake increases, total staked increases.
+6. **Accumulate rewards** — as vault management fees are harvested, 40% goes to stakers (in USDC).
+7. **Claim rewards** — click "Claim $X.XXXX" button → wallet confirms → "Rewards claimed!" toast. USDC received.
+8. **Unstake** — enter amount → click "Unstake" → wallet confirms → "Unstaked successfully!". CLAWD returned, no lockup.
 
 ### Edge Cases
-- **No CLAWD tokens:** Staking section shows link to acquire CLAWD
-- **No rewards yet:** Claim button disabled, shows "No rewards to claim"
-- **Zero amount:** Stake button disabled
+
+- **No CLAWD balance** → stake tx reverts
+- **No rewards** → Claim button shows "No rewards to claim" and is disabled
+- **Not connected** → "Connect your wallet to stake CLAWD" shown
 
 ---
 
-## Flow 5: Guardian Admin Functions
+## Journey 5: Guardian Admin Operations
 
-### Happy Path (guardian-only)
-1. Guardian connects wallet, sees "Admin" tab (hidden for non-guardians)
-2. **Whitelist Token:** Enters token address, Chainlink feed, deployer group, liquidity threshold. Submits tx
-3. **Adjust Safety Parameters:** Updates max allocation cap, max delta, slippage limits (within immutable ceilings)
-4. **Pause/Unpause Rebalancing:** Toggle button. Does NOT affect user deposits/withdrawals
-5. **Deploy New Vault:** Enters category name, share token name/symbol. Factory deploys new vault
+### Happy Path
+
+1. **Navigate to Admin (/admin)** — must be connected with guardian wallet.
+2. **System Status** — shows rebalancing status (ACTIVE/PAUSED), active vaults, whitelisted tokens, guardian address.
+3. **Pause/Unpause** — click "Pause Rebalancing" or "Unpause Rebalancing" → wallet confirms → status updates. Note: pause only affects rebalancing, user deposits/withdrawals stay active.
+4. **Deploy New Vault** — enter share name, symbol, category → click "Deploy Vault" → wallet confirms → vault created. Appears in vault list and on dashboard.
+5. **Whitelist Token** — enter token address, Chainlink price feed, deployer group, min liquidity → click "Whitelist Token" → wallet confirms. Token available for index inclusion.
+6. **View whitelisted tokens** — list shown with addresses.
 
 ### Edge Cases
-- **Non-guardian wallet:** Admin tab not visible
-- **Parameter exceeds ceiling:** Transaction reverts with "Exceeds immutable ceiling" error
-- **Paused state:** Clear banner on all pages showing "Rebalancing paused — deposits and withdrawals remain active"
+
+- **Not guardian** → "⛔ Not Guardian" with message "Only the guardian address can access admin functions" and the guardian address shown.
+- **Not connected** → "Connect your wallet to access admin functions"
+- **Wrong network** → Switch Network button shown
 
 ---
 
-## Universal Edge Cases
+## Post-Deploy Guardian Setup (After contract deployment)
 
-- **RPC failure:** App shows "Network error — please try again"
-- **Transaction stuck:** Loading state with "Transaction pending..." message
-- **Mobile:** All flows work on mobile viewport with responsive layout
-- **No wallet extension:** RainbowKit shows WalletConnect QR for mobile wallets
+These steps are done by the guardian (client) via the Debug Contracts page or direct contract calls:
+
+1. Set RebalanceExecutor as authorized caller in SafetyModule
+2. Register AerodromeAdapter in RouterRegistry + set as default
+3. Whitelist tokens in AssetRegistry with Chainlink price feeds
+4. Deploy a vault via Admin page or IndexFactory
+5. Set executor on the vault (IndexVault.setExecutor)
+6. Authorize vault in RebalanceExecutor
+7. Authorize vault in CLAWDFeeDistributor
+8. Configure real LarvAI signer in WeightVerifier
+
+---
+
+## Error States (Global)
+
+| State | What User Sees |
+|-------|---------------|
+| No wallet installed | RainbowKit shows wallet install options |
+| Wrong network | "Switch Network" button on all action pages |
+| TX pending | Button shows loading text, is disabled |
+| TX reverted | Human-readable error toast |
+| No vaults exist | Dashboard shows "No vaults deployed yet" |
+| Contract paused | Admin shows warning banner; deposits/redeems still work |
