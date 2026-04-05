@@ -1,11 +1,11 @@
 "use client";
 
-import type { NextPage } from "next";
-import { formatUnits } from "viem";
+import { useState } from "react";
+import Link from "next/link";
+import "../globals.css";
 import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
-import { Address } from "~~/components/scaffold-eth";
 
-const AllocationsPage: NextPage = () => {
+export default function AllocationsPage() {
   const { data: constituents } = useScaffoldReadContract({
     contractName: "IndexVault",
     functionName: "getConstituents",
@@ -21,7 +21,6 @@ const AllocationsPage: NextPage = () => {
     functionName: "totalAssets",
   });
 
-  // SafetyModule reads
   const { data: singleTokenCap } = useScaffoldReadContract({
     contractName: "SafetyModule",
     functionName: "singleTokenCap",
@@ -32,18 +31,16 @@ const AllocationsPage: NextPage = () => {
     functionName: "maxDeltaPerCycle",
   });
 
-  // WeightVerifier reads
   const { data: larvAISigner } = useScaffoldReadContract({
     contractName: "WeightVerifier",
     functionName: "larvAISigner",
   });
 
-  const tvl = totalAssets ? Number(formatUnits(totalAssets, 6)) : 0;
+  const tvl = totalAssets ? Number(totalAssets) / 1e6 : 0;
 
   const tokens = currentWeightsData ? (currentWeightsData as any)[0] as string[] : [];
   const weights = currentWeightsData ? (currentWeightsData as any)[1] as number[] : [];
 
-  // Color palette for allocations
   const colors = [
     "bg-primary", "bg-secondary", "bg-accent", "bg-info",
     "bg-success", "bg-warning", "bg-error", "bg-neutral",
@@ -52,6 +49,19 @@ const AllocationsPage: NextPage = () => {
   return (
     <div className="flex items-center flex-col grow pt-10 px-4">
       <div className="max-w-4xl w-full">
+        {/* Header */}
+        <div className="navbar bg-base-200 mb-8 rounded-lg">
+          <div className="flex-1">
+            <Link href="/" className="btn btn-ghost text-xl">🦞</Link>
+          </div>
+          <div className="flex-none">
+            <ul className="menu menu-horizontal px-1 gap-2">
+              <li><Link href="/vault" className="btn btn-sm btn-outline">Deposit</Link></li>
+              <li><Link href="/allocations" className="btn btn-sm btn-primary">Allocations</Link></li>
+            </ul>
+          </div>
+        </div>
+
         <h1 className="text-3xl font-bold text-center mb-2">📊 Allocations</h1>
         <p className="text-center opacity-60 mb-8">Current portfolio weights and safety parameters</p>
 
@@ -93,7 +103,7 @@ const AllocationsPage: NextPage = () => {
                       <div key={token} className="flex items-center justify-between p-3 bg-base-100 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div className={`w-4 h-4 rounded-full ${colors[i % colors.length]}`}></div>
-                          <Address address={token as `0x${string}`} />
+                          <span className="font-mono text-sm">{token.slice(0, 6)}...{token.slice(-4)}</span>
                         </div>
                         <div className="text-right">
                           <p className="font-mono font-bold">{weight.toFixed(1)}%</p>
@@ -146,7 +156,7 @@ const AllocationsPage: NextPage = () => {
             {larvAISigner ? (
               <div className="flex items-center gap-2">
                 <span className="badge badge-success badge-sm">Verified</span>
-                <Address address={larvAISigner as `0x${string}`} />
+                <span className="font-mono text-sm">{String(larvAISigner).slice(0, 6)}...{String(larvAISigner).slice(-4)}</span>
               </div>
             ) : (
               <p className="opacity-50">No signer configured</p>
@@ -159,6 +169,4 @@ const AllocationsPage: NextPage = () => {
       </div>
     </div>
   );
-};
-
-export default AllocationsPage;
+}

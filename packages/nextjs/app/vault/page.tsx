@@ -1,20 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import type { NextPage } from "next";
-import { formatUnits, parseUnits } from "viem";
-import { useAccount } from "wagmi";
+import Link from "next/link";
+import "../globals.css";
 import { useScaffoldReadContract, useScaffoldWriteContract, useDeployedContractInfo } from "~~/hooks/scaffold-eth";
-import { notification } from "~~/utils/scaffold-eth";
+import { notification } from "~~/utils/scaffold-eth/notification";
+import { useAccount } from "wagmi";
+import { formatUnits, parseUnits } from "viem";
 
-const VaultPage: NextPage = () => {
+export default function VaultPage() {
   const { address: connectedAddress } = useAccount();
   const [activeTab, setActiveTab] = useState<"deposit" | "redeem">("deposit");
   const [depositAmount, setDepositAmount] = useState("");
   const [redeemAmount, setRedeemAmount] = useState("");
 
   const { data: vaultInfo } = useDeployedContractInfo("IndexVault");
-  const vaultAddress = vaultInfo?.address;
+  const vaultAddress = vaultInfo?.address as `0x${string}` | undefined;
 
   // Vault reads
   const { data: totalAssets } = useScaffoldReadContract({
@@ -27,10 +28,11 @@ const VaultPage: NextPage = () => {
     functionName: "totalSupply",
   });
 
-  const { data: vaultSymbol } = useScaffoldReadContract({
+  const { data: _vaultSymbol } = useScaffoldReadContract({
     contractName: "IndexVault",
     functionName: "symbol",
   });
+  const vaultSymbol = (_vaultSymbol as string) || "cDEX";
 
   const { data: managementFeeBPS } = useScaffoldReadContract({
     contractName: "IndexVault",
@@ -41,53 +43,53 @@ const VaultPage: NextPage = () => {
   const { data: userUsdcBalance } = useScaffoldReadContract({
     contractName: "USDC",
     functionName: "balanceOf",
-    args: [connectedAddress],
+    args: [connectedAddress as `0x${string}`],
   });
 
   const { data: userShareBalance } = useScaffoldReadContract({
     contractName: "IndexVault",
     functionName: "balanceOf",
-    args: [connectedAddress],
+    args: [connectedAddress as `0x${string}`],
   });
 
   const { data: usdcAllowance } = useScaffoldReadContract({
     contractName: "USDC",
     functionName: "allowance",
-    args: [connectedAddress, vaultAddress],
+    args: [connectedAddress as `0x${string}`, vaultAddress as `0x${string}`],
   });
 
   // Write hooks
   const { writeContractAsync: writeUsdc, isPending: isApproving } = useScaffoldWriteContract("USDC");
-
   const { writeContractAsync: writeVault, isPending: isVaultPending } = useScaffoldWriteContract("IndexVault");
 
   // Computed values
-  const tvl = totalAssets ? Number(formatUnits(totalAssets, 6)) : 0;
-  const shares = totalSupply ? Number(formatUnits(totalSupply, 18)) : 0;
+  const tvl = totalAssets ? Number(totalAssets) / 1e6 : 0;
+  const shares = totalSupply ? Number(totalSupply) / 1e18 : 0;
   const navPerShare = shares > 0 ? tvl / shares : 1;
   const feePercent = managementFeeBPS ? Number(managementFeeBPS) / 100 : 1;
 
   const depositAmountParsed = depositAmount ? parseUnits(depositAmount, 6) : 0n;
   const redeemAmountParsed = redeemAmount ? parseUnits(redeemAmount, 18) : 0n;
 
-  const needsApproval = depositAmountParsed > 0n && (usdcAllowance === undefined || usdcAllowance < depositAmountParsed);
+  const needsApproval = depositAmountParsed > 0n && (usdcAllowance === undefined || usdcAllowance === null || (usdcAllowance as bigint) < depositAmountParsed);
 
   const estimatedShares = depositAmount ? Number(depositAmount) / navPerShare : 0;
   const estimatedUsdc = redeemAmount ? Number(redeemAmount) * navPerShare : 0;
 
-  const userUsdcDisplay = userUsdcBalance ? Number(formatUnits(userUsdcBalance, 6)) : 0;
-  const userShareDisplay = userShareBalance ? Number(formatUnits(userShareBalance, 18)) : 0;
+  const userUsdcDisplay = userUsdcBalance ? Number(formatUnits(userUsdcBalance as bigint, 6)) : 0;
+  const userShareDisplay = userShareBalance ? Number(formatUnits(userShareBalance as bigint, 18)) : 0;
 
-  const insufficientUsdc = depositAmountParsed > 0n && userUsdcBalance !== undefined && depositAmountParsed > userUsdcBalance;
-  const insufficientShares = redeemAmountParsed > 0n && userShareBalance !== undefined && redeemAmountParsed > userShareBalance;
+  const insufficientUsdc = depositAmountParsed > 0n && userUsdcBalance !== undefined && depositAmountParsed > (userUsdcBalance as bigint);
+  const insufficientShares = redeemAmountParsed > 0n && userShareBalance !== undefined && redeemAmountParsed > (userShareBalance as bigint);
 
   // Handlers
   const handleApprove = async () => {
     try {
+      if (!vaultAddress) return;
       await writeUsdc({
         functionName: "approve",
         args: [vaultAddress, depositAmountParsed],
-      });
+      } as any);
       notification.success("USDC approved!");
     } catch (e: any) {
       notification.error("Approval failed: " + (e?.shortMessage || e?.message || "Unknown error"));
@@ -96,10 +98,11 @@ const VaultPage: NextPage = () => {
 
   const handleDeposit = async () => {
     try {
+      if (!connectedAddress) return;
       await writeVault({
         functionName: "deposit",
-        args: [depositAmountParsed, connectedAddress],
-      });
+        args: [depositAmountParsed, connectedAddress as `0x${string}`],
+      } as any);
       notification.success(`Deposited ${depositAmount} USDC`);
       setDepositAmount("");
     } catch (e: any) {
@@ -109,10 +112,11 @@ const VaultPage: NextPage = () => {
 
   const handleRedeem = async () => {
     try {
+      if (!connectedAddress) return;
       await writeVault({
         functionName: "redeem",
-        args: [redeemAmountParsed, connectedAddress, connectedAddress],
-      });
+        args: [redeemAmountParsed, connectedAddress as `0x${string}`, connectedAddress as `0x${string}`],
+      } as any);
       notification.success(`Redeemed ${redeemAmount} shares`);
       setRedeemAmount("");
     } catch (e: any) {
@@ -123,8 +127,21 @@ const VaultPage: NextPage = () => {
   return (
     <div className="flex items-center flex-col grow pt-10 px-4">
       <div className="max-w-lg w-full">
+        {/* Header */}
+        <div className="navbar bg-base-200 mb-8 rounded-lg">
+          <div className="flex-1">
+            <Link href="/" className="btn btn-ghost text-xl">🦞</Link>
+          </div>
+          <div className="flex-none">
+            <ul className="menu menu-horizontal px-1 gap-2">
+              <li><Link href="/vault" className="btn btn-sm btn-primary">Deposit</Link></li>
+              <li><Link href="/allocations" className="btn btn-sm btn-outline">Allocations</Link></li>
+            </ul>
+          </div>
+        </div>
+
         <h1 className="text-3xl font-bold text-center mb-2">🦞 Vault</h1>
-        <p className="text-center opacity-60 mb-6">Deposit USDC or redeem {vaultSymbol || "cDEX"} shares</p>
+        <p className="text-center opacity-60 mb-6">Deposit USDC or redeem {vaultSymbol} shares</p>
 
         {/* Stats Bar */}
         <div className="grid grid-cols-2 gap-3 mb-6">
@@ -185,7 +202,7 @@ const VaultPage: NextPage = () => {
                       />
                       <button
                         className="btn join-item btn-sm"
-                        onClick={() => userUsdcBalance && setDepositAmount(formatUnits(userUsdcBalance, 6))}
+                        onClick={() => userUsdcBalance && setDepositAmount(formatUnits(userUsdcBalance as bigint, 6))}
                       >
                         MAX
                       </button>
@@ -203,7 +220,7 @@ const VaultPage: NextPage = () => {
                       <div className="flex justify-between">
                         <span className="opacity-60">Estimated shares</span>
                         <span className="font-mono">
-                          {estimatedShares.toLocaleString(undefined, { maximumFractionDigits: 4 })} {vaultSymbol || "cDEX"}
+                          {estimatedShares.toLocaleString(undefined, { maximumFractionDigits: 4 })} {vaultSymbol}
                         </span>
                       </div>
                       <div className="flex justify-between mt-1">
@@ -259,9 +276,9 @@ const VaultPage: NextPage = () => {
                 <>
                   <div className="form-control">
                     <label className="label">
-                      <span className="label-text">{vaultSymbol || "cDEX"} Shares</span>
+                      <span className="label-text">{vaultSymbol} Shares</span>
                       <span className="label-text-alt">
-                        Balance: {userShareDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} {vaultSymbol || "cDEX"}
+                        Balance: {userShareDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} {vaultSymbol}
                       </span>
                     </label>
                     <div className="join w-full">
@@ -276,7 +293,7 @@ const VaultPage: NextPage = () => {
                       />
                       <button
                         className="btn join-item btn-sm"
-                        onClick={() => userShareBalance && setRedeemAmount(formatUnits(userShareBalance, 18))}
+                        onClick={() => userShareBalance && setRedeemAmount(formatUnits(userShareBalance as bigint, 18))}
                       >
                         MAX
                       </button>
@@ -312,7 +329,7 @@ const VaultPage: NextPage = () => {
                       ) : !redeemAmount || Number(redeemAmount) <= 0 ? (
                         "Enter amount"
                       ) : (
-                        `Redeem ${redeemAmount} ${vaultSymbol || "cDEX"}`
+                        `Redeem ${redeemAmount} ${vaultSymbol}`
                       )}
                     </button>
                   </div>
@@ -330,7 +347,7 @@ const VaultPage: NextPage = () => {
               <div className="flex justify-between">
                 <span className="opacity-60">Shares held</span>
                 <span className="font-mono">
-                  {userShareDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} {vaultSymbol || "cDEX"}
+                  {userShareDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} {vaultSymbol}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -345,6 +362,4 @@ const VaultPage: NextPage = () => {
       </div>
     </div>
   );
-};
-
-export default VaultPage;
+}

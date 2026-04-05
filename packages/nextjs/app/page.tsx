@@ -1,43 +1,23 @@
-"use client";
-
 import Link from "next/link";
-import type { NextPage } from "next";
-import { formatUnits } from "viem";
-import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import "./globals.css";
 
-const Home: NextPage = () => {
-  const { data: totalAssets } = useScaffoldReadContract({
-    contractName: "IndexVault",
-    functionName: "totalAssets",
-  });
-
-  const { data: totalSupply } = useScaffoldReadContract({
-    contractName: "IndexVault",
-    functionName: "totalSupply",
-  });
-
-  const { data: vaultName } = useScaffoldReadContract({
-    contractName: "IndexVault",
-    functionName: "name",
-  });
-
-  const { data: vaultSymbol } = useScaffoldReadContract({
-    contractName: "IndexVault",
-    functionName: "symbol",
-  });
-
-  const { data: constituents } = useScaffoldReadContract({
-    contractName: "IndexVault",
-    functionName: "getConstituents",
-  });
-
-  const tvl = totalAssets ? Number(formatUnits(totalAssets, 6)) : 0;
-  const shares = totalSupply ? Number(formatUnits(totalSupply, 18)) : 0;
-  const navPerShare = shares > 0 ? tvl / shares : 1;
-
+export default function Home() {
   return (
     <div className="flex items-center flex-col grow pt-10 px-4">
       <div className="max-w-4xl w-full">
+        {/* Header */}
+        <div className="navbar bg-base-200 mb-8 rounded-lg">
+          <div className="flex-1">
+            <Link href="/" className="btn btn-ghost text-xl">🦞</Link>
+          </div>
+          <div className="flex-none">
+            <ul className="menu menu-horizontal px-1 gap-2">
+              <li><Link href="/vault" className="btn btn-sm btn-primary">Deposit</Link></li>
+              <li><Link href="/allocations" className="btn btn-sm btn-outline">Allocations</Link></li>
+            </ul>
+          </div>
+        </div>
+
         {/* Hero */}
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold mb-2">🦞 ClawDex</h1>
@@ -48,69 +28,17 @@ const Home: NextPage = () => {
           </p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="card bg-base-200 shadow-sm">
-            <div className="card-body p-4">
-              <h3 className="card-title text-sm opacity-60">Total Value Locked</h3>
-              <p className="text-2xl font-mono font-bold">
-                ${tvl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-            </div>
-          </div>
-
-          <div className="card bg-base-200 shadow-sm">
-            <div className="card-body p-4">
-              <h3 className="card-title text-sm opacity-60">NAV / Share</h3>
-              <p className="text-2xl font-mono font-bold">
-                ${navPerShare.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
-              </p>
-            </div>
-          </div>
-
-          <div className="card bg-base-200 shadow-sm">
-            <div className="card-body p-4">
-              <h3 className="card-title text-sm opacity-60">Constituents</h3>
-              <p className="text-2xl font-mono font-bold">
-                {constituents !== undefined ? constituents.length.toString() : "—"}
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Vault Card */}
         <div className="card bg-base-200 shadow-sm mb-8">
           <div className="card-body">
-            <h2 className="card-title text-lg mb-4">
-              {vaultName || "Index Vault"} ({vaultSymbol || "cDEX"})
-            </h2>
-
-            {tvl === 0 ? (
-              <div className="text-center py-8 opacity-50">
-                <p className="text-lg mb-2">Vault is empty</p>
-                <p className="text-sm">Be the first to deposit USDC and receive index shares.</p>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between p-4 bg-base-100 rounded-lg">
-                <div>
-                  <p className="font-bold">TVL: ${tvl.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-                  <p className="text-sm opacity-60">
-                    {shares.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares outstanding
-                  </p>
-                </div>
-                <Link href="/vault" className="btn btn-primary btn-sm">
-                  Deposit / Redeem
-                </Link>
-              </div>
-            )}
-
-            {tvl === 0 && (
-              <div className="mt-4 text-center">
-                <Link href="/vault" className="btn btn-primary">
-                  Deposit USDC
-                </Link>
-              </div>
-            )}
+            <h2 className="card-title text-lg mb-4">Index Vault</h2>
+            <div className="text-center py-8 opacity-50">
+              <p className="text-lg mb-2">Connect wallet to view vault stats</p>
+              <p className="text-sm">Deposit USDC to receive index shares and gain diversified exposure.</p>
+            </div>
+            <div className="mt-4 text-center">
+              <Link href="/vault" className="btn btn-primary">Deposit USDC</Link>
+            </div>
           </div>
         </div>
 
@@ -146,19 +74,10 @@ const Home: NextPage = () => {
 
         {/* Navigation */}
         <div className="flex flex-wrap gap-3 justify-center">
-          <Link href="/vault" className="btn btn-outline btn-sm">
-            Deposit / Redeem
-          </Link>
-          <Link href="/allocations" className="btn btn-outline btn-sm">
-            View Allocations
-          </Link>
-          <Link href="/admin" className="btn btn-outline btn-sm">
-            Admin Panel
-          </Link>
+          <Link href="/vault" className="btn btn-outline btn-sm">Deposit / Redeem</Link>
+          <Link href="/allocations" className="btn btn-outline btn-sm">View Allocations</Link>
         </div>
       </div>
     </div>
   );
-};
-
-export default Home;
+}
